@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# herd-up [cwd] — start the herd coordinator ("head") in a new herdr tab
+# Defaults to the current directory, so run it from the project you're working in.
+set -euo pipefail
+cwd=${1:-$PWD}
+skill="$HOME/.claude/skills/herd/SKILL.md"
+[ -f "$skill" ] || { echo "herd skill not found at $skill — run install.sh first" >&2; exit 1; }
+mkdir -p /tmp/herd
+tab_json=$(herdr tab create --cwd "$cwd" --label head --no-focus)
+pane=$(printf '%s\n' "$tab_json" | jq -r '.result.root_pane.pane_id')
+# strip the skill's frontmatter (everything through the second ---)
+herdr agent start head --kind claude --pane "$pane" -- \
+  --append-system-prompt "$(awk 'f {print} /^---$/ {if (++n == 2) f = 1}' "$skill")" \
+  --add-dir /tmp/herd \
+  --allowedTools "Bash(herd-spawn:*),Bash(herdr:*),Read(//tmp/herd/**)" >/dev/null
+herdr agent focus head
+echo "head agent running in pane $pane (cwd $cwd) — talk to it there, or: herdr agent prompt head \"<task>\""

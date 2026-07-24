@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# herd-spawn [-k kind] [-a "extra agent args"] <name> <cwd> <task...>
+# Spawn a worker agent in a new herdr tab. Default kind: claude.
+set -euo pipefail
+kind=claude
+extra=""
+while getopts "k:a:" opt; do
+  case $opt in
+    k) kind=$OPTARG ;;
+    a) extra=$OPTARG ;;
+    *) exit 2 ;;
+  esac
+done
+shift $((OPTIND - 1))
+name=$1; cwd=$2; shift 2
+task="$*"
+if [ -z "$extra" ] && [ "$kind" = claude ]; then
+  extra="--permission-mode acceptEdits"
+fi
+mkdir -p /tmp/herd
+tab_json=$(herdr tab create --cwd "$cwd" --label "$name" --no-focus)
+pane=$(printf '%s\n' "$tab_json" | jq -r '.result.root_pane.pane_id')
+tab_id=$(printf '%s\n' "$tab_json" | jq -r '.result.tab.tab_id')
+# $extra is deliberately word-split into agent args
+herdr agent start "$name" --kind "$kind" --pane "$pane" -- $extra >/dev/null
+herdr agent prompt "$name" "$task
+
+When you are completely done, write a full report (what you did, files touched, how you verified it) to /tmp/herd/$name.md. Keep your terminal reply to a short summary."
+echo "worker=$name kind=$kind pane=$pane tab=$tab_id report=/tmp/herd/$name.md"
