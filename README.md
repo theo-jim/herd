@@ -64,6 +64,8 @@ herd-spawn -m tab docs-pass ~/proj "Update the docs for the new auth flow"
 
 `-k` picks the agent kind (default `claude`), `-a` replaces the default agent args (for claude that default is `--permission-mode acceptEdits` — re-include a permission flag if you still want one), `-m` picks the spawn mode (`pane`, the default, or `tab`; also settable globally via `HERD_SPAWN_MODE`). Reports land in `/tmp/herd/<name>.md`.
 
+If a worker needs a different branch than what's checked out in `<cwd>`, create a `git worktree` for it (e.g. under `.claude/worktrees/<name>`) and pass that path as `<cwd>` instead of the shared directory.
+
 You can also make any existing Claude Code session the head: just invoke the `/herd` skill.
 
 ## Uninstall

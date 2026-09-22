@@ -24,6 +24,20 @@ Write task text that stands alone — the worker has no context beyond it.
 
 In pane mode, each new worker splits off the previous worker's pane, not the coordinator's, alternating direction right/down — a spiral tiling, not a single shrinking strip. Your own pane stays fixed at its size from the very first split; only worker panes get smaller as more stack up, and they degrade gracefully (2D grid) rather than collapsing into unreadable slivers. If the tracked previous pane was closed, the next spawn starts a fresh spiral from your own pane again. Past 3–4 concurrent workers panes are still cramped enough to be barely readable — close finished ones before spawning more, switch to `-m tab` for the next batch, or check with the user before piling on further splits. Tab mode has no such chaining: each worker simply gets its own tab.
 
+If a worker needs a different branch than what's currently checked out in `<cwd>`'s repo, don't just point it at the shared directory — create an isolated worktree and pass that path as `<cwd>`. Put it inside the repo, under `.claude/worktrees/<name>` (`git worktree add .claude/worktrees/<name> <branch>`), not in a scratch/tmp dir outside it: `.claude/*` is commonly gitignored already, and a worktree there inherits the repo's own `.claude/settings.local.json` (permission allowlist, hooks) for free through Claude Code's normal directory walk-up — a worktree outside the repo tree gets none of that and the worker ends up blocking on routine commands the main repo already allows. This keeps the worker from colliding with uncommitted changes already sitting in the shared working tree. Remove the worktree (`git worktree remove <path>`) once its changes are merged, pushed, or abandoned — don't leave them accumulating.
+
+### Claude workers: models
+
+Pass with `-a "--model <model_id> ..."`. Before every use, cross-check `<model_id>` against this session's own model-ID system reminder — not just the table below, which is a fallback snapshot and can itself go stale, since names change between conversations. The check costs nothing (the reminder is already in context); guessing wrong doesn't — it means redoing whatever that worker produced, at full price, once the mistake surfaces. If `<model_id>` doesn't match an ID the current reminder lists, use the reminder's exact ID instead, or drop `--model` entirely:
+
+| Model ID | Character |
+|---|---|
+| `claude-opus-5` | frontier, hardest review/design work |
+| `claude-sonnet-5` | balances intelligence and cost, good default for implementation |
+| `claude-haiku-4-5-20251001` | fast, cheap, bulk/mechanical tasks |
+
+Omitting `-a` (or omitting `--model` within it) uses whatever `claude` resolves to locally.
+
 ### Codex workers: models and reasoning
 
 Codex (OpenAI) models — pass with `-a '-m <model_id> -c model_reasoning_effort=<level> --sandbox workspace-write'`:
@@ -54,6 +68,10 @@ When a watcher completes:
 - `blocked` → `herdr agent read <name> --source visible` to see what it's asking. Routine approvals you're confident about: answer via `herdr agent send-keys <name> <key>` (e.g. `enter`, `esc`, `down`). Anything risky or unclear: tell the user which pane to look at (workers are already visible as split panes in this same tab). Then re-watch.
 
 `herdr agent list` shows ground truth on live workers if you lose track.
+
+For a review-only task in `--permission-mode plan`, skip the report-file requirement rather than working around it: plan mode blocks all file writes, so writing `/tmp/herd/<name>.md` costs a guaranteed extra `blocked` round just to exit plan mode for that one write. Instead, tell the worker in its task prompt to give its verdict directly in its final chat reply, and read it with `herdr agent read <name> --source visible` (or `recent-unwrapped` for more) once it settles — no file, no exit-plan-mode detour.
+
+If a worker keeps stopping for routine read-only commands (`find`, `cat`, `git diff`/`log`/`status`), that approval volume is often the real cost of a review or exploration task. Worth a broader `--permission-mode` or a repo-level read-only allowlist next time, rather than approving each one by hand.
 
 ## Follow-ups
 
