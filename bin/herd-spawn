@@ -1,29 +1,70 @@
 #!/usr/bin/env bash
-# herd-spawn [-k kind] [-a "extra agent args"] <name> <cwd> <task...>
-# Spawn a worker agent in a new herdr tab. Default kind: claude.
+# herd-spawn [-k kind] [-a "extra agent args"] [-m pane|tab] <name> <cwd> <task...>
+# Spawn a worker agent in the current herdr tab (mode "pane", default) or in its own
+# new tab (mode "tab"). Default mode is $HERD_SPAWN_MODE if set, else "pane".
+# In pane mode, each new worker splits off the PREVIOUS worker's pane (not the
+# coordinator's), alternating direction right/down, so panes tile in a spiral instead
+# of collapsing into ever-thinner strips and the coordinator's own pane never shrinks.
+# In tab mode, each worker gets a fresh tab, so no such chaining is needed.
+# Default kind: claude.
 set -euo pipefail
 kind=claude
 extra=""
-while getopts "k:a:" opt; do
+mode="${HERD_SPAWN_MODE:-pane}"
+while getopts "k:a:m:" opt; do
   case $opt in
     k) kind=$OPTARG ;;
     a) extra=$OPTARG ;;
+    m) mode=$OPTARG ;;
     *) exit 2 ;;
   esac
 done
 shift $((OPTIND - 1))
 name=$1; cwd=$2; shift 2
 task="$*"
+case "$mode" in
+  pane|tab) ;;
+  *) echo "herd-spawn: -m must be 'pane' or 'tab', got '$mode'" >&2; exit 2 ;;
+esac
 if [ -z "$extra" ] && [ "$kind" = claude ]; then
   extra="--permission-mode acceptEdits"
 fi
 mkdir -p /tmp/herd
-tab_json=$(herdr tab create --cwd "$cwd" --label "$name" --no-focus)
-pane=$(printf '%s\n' "$tab_json" | jq -r '.result.root_pane.pane_id')
-tab_id=$(printf '%s\n' "$tab_json" | jq -r '.result.tab.tab_id')
+
+if [ "$mode" = tab ]; then
+  tab_json=$(herdr tab create --cwd "$cwd" --label "$name" --no-focus)
+  pane=$(printf '%s\n' "$tab_json" | jq -r '.result.root_pane.pane_id')
+else
+  own_tab=$(herdr pane current | jq -r '.result.pane.tab_id')
+  state_pane="/tmp/herd/.last_pane.$own_tab"
+  state_dir="/tmp/herd/.last_dir.$own_tab"
+
+  split_target_args=(--current)
+  continuing_chain=0
+  if [ -f "$state_pane" ]; then
+    last_pane=$(cat "$state_pane")
+    if herdr pane get "$last_pane" >/dev/null 2>&1; then
+      split_target_args=(--pane "$last_pane")
+      continuing_chain=1
+    fi
+  fi
+
+  # A fresh chain (no live tracked pane, e.g. all prior workers closed) always starts
+  # right, regardless of what direction the previous chain last used.
+  direction=right
+  if [ "$continuing_chain" = 1 ] && [ -f "$state_dir" ] && [ "$(cat "$state_dir")" = right ]; then
+    direction=down
+  fi
+
+  split_json=$(herdr pane split "${split_target_args[@]}" --direction "$direction" --cwd "$cwd" --no-focus)
+  pane=$(printf '%s\n' "$split_json" | jq -r '.result.pane.pane_id')
+  printf '%s' "$pane" > "$state_pane"
+  printf '%s' "$direction" > "$state_dir"
+fi
+herdr pane rename "$pane" "$name" >/dev/null 2>&1 || true
 # $extra is deliberately word-split into agent args
 herdr agent start "$name" --kind "$kind" --pane "$pane" -- $extra >/dev/null
 herdr agent prompt "$name" "$task
 
 When you are completely done, write a full report (what you did, files touched, how you verified it) to /tmp/herd/$name.md. Keep your terminal reply to a short summary."
-echo "worker=$name kind=$kind pane=$pane tab=$tab_id report=/tmp/herd/$name.md"
+echo "worker=$name kind=$kind pane=$pane report=/tmp/herd/$name.md"
