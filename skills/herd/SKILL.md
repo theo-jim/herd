@@ -28,19 +28,21 @@ If a worker needs a different branch than what's currently checked out in `<cwd>
 
 ### Claude workers: models
 
-Pass with `-a "--model <model_id> ..."`. Before every use, cross-check `<model_id>` against this session's own model-ID system reminder — not just the table below, which is a fallback snapshot and can itself go stale, since names change between conversations. The check costs nothing (the reminder is already in context); guessing wrong doesn't — it means redoing whatever that worker produced, at full price, once the mistake surfaces. If `<model_id>` doesn't match an ID the current reminder lists, use the reminder's exact ID instead, or drop `--model` entirely:
+Pass with `-a "--model <alias> ..."`, using the bare tier alias — `opus`, `sonnet`, or `haiku` — not a version-pinned model ID. The CLI itself resolves the alias to whatever is currently the latest model in that tier (verified: `claude --model opus -p "..."` resolves to the exact ID this session's own model reminder names for Opus, and likewise for `sonnet`/`haiku`). Pinned IDs like `claude-opus-5` go stale as new versions ship and there is no reliable way to keep the table below current — the alias sidesteps that entirely, no cross-checking needed.
 
-| Model ID | Character |
+| Alias | Character |
 |---|---|
-| `claude-opus-5` | frontier, hardest review/design work |
-| `claude-sonnet-5` | balances intelligence and cost, good default for implementation |
-| `claude-haiku-4-5-20251001` | fast, cheap, bulk/mechanical tasks |
+| `opus` | frontier, hardest review/design work |
+| `sonnet` | balances intelligence and cost, good default for implementation |
+| `haiku` | fast, cheap, bulk/mechanical tasks |
 
-Omitting `-a` (or omitting `--model` within it) uses whatever `claude` resolves to locally.
+Only fall back to a version-pinned ID (cross-checked against this session's own model-ID system reminder first) if the task genuinely needs to pin an exact version rather than "latest in this tier" — e.g. reproducing a past worker's behavior precisely. Omitting `-a` (or omitting `--model` within it) uses whatever `claude` resolves to locally.
 
 ### Codex workers: models and reasoning
 
-Codex (OpenAI) models — pass with `-a '-m <model_id> -c model_reasoning_effort=<level> --sandbox workspace-write'`:
+Codex (OpenAI) models — pass with `-a '-m <model_id> -c model_reasoning_effort=<level> --sandbox workspace-write'`. Unlike Claude, Codex has **no bare tier alias** that self-resolves to the latest version — verified: `codex exec -m sol ...` fails outright ("the 'sol' model is not supported"), so the full versioned ID (`gpt-<version>-sol`) is always required, and that version number goes stale exactly like a pinned Claude ID would.
+
+Before every use, cross-check the version prefix against a live source, not just the table below: run `codex doctor | grep model` (or read the top-level `model = "..."` line in `~/.codex/config.toml`) to see the version prefix the local Codex install currently defaults to — that default is kept current by the user's own Codex CLI/account, unlike this skill's table. Take the prefix from whichever tier that default names (usually `sol`) and reuse it for the other two tiers (swap the `-sol`/`-terra`/`-luna` suffix, same prefix). If the prefix differs from the table below, or you're about to spawn a tier you haven't verified this session, do one cheap probe first — `codex exec -m <candidate> -c model_reasoning_effort=low --sandbox read-only --skip-git-repo-check "reply OK"` — and check for a `Model metadata for '<id>' not found` warning or a 400 error before trusting it for the real task.
 
 | Model ID | Character | Price in/out per MTok |
 |---|---|---|
