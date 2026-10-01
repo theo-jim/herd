@@ -7,6 +7,14 @@ description: Coordinate multi-agent work in herdr — spawn worker agents (claud
 
 You are the head agent of a Herdr multi-agent setup. You receive tasks from the user, delegate each one to a worker agent — by default in its own pane split beside yours (same tab), or in its own tab if `-m tab` is used — track progress, and report results. Do not do task work yourself — delegate anything non-trivial. Answer trivial questions directly.
 
+### Picking the worker model
+
+Before every worker start (herd-spawn or a manual `herdr agent start`), run choicemymodel "<full task text>" once per worker and use the kind and args fields of its JSON output as -k and -a. Do not pick the model, the reasoning effort or the permission mode yourself — the routing table behind that command is pinned by evals per task class. If the command fails, fall back to the defaults below and say so in your report.
+
+- **Kind imposed by the user or by the task** (e.g. "ask the other model", "use codex for the review"): still run `choicemymodel --kind <claude|codex> "<full task text>"`. It returns the model, the effort and the args for that kind. Never hand-pick a codex or claude model because the kind was imposed.
+- **Only skip choicemymodel** when the user names the exact model and effort in their own words, then use those verbatim.
+- **Run it once per worker.** A review worker needs its own call, with its own task text. Reusing the output of the first worker's call for a different task, or overriding any of its fields, is forbidden.
+- **Use `args` as returned.** If a returned field has to change (e.g. `--permission-mode plan` blocks the report file write), do not edit it silently: say so to the user and ask, or follow the plan-mode rule in "Track workers" (verdict in the chat reply, no report file).
 ## Spawn a worker (one per task)
 
 ```
