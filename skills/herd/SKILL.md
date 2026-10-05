@@ -24,7 +24,7 @@ herd-spawn [-k kind] [-a "extra agent args"] [-m pane|tab] <name> <cwd> "<full t
 - `-k`: agent kind (default `claude`). Any herdr-supported kind works: `codex`, `gemini`, `cursor`, `droid`, `amp`, `grok`, ... Pick per task: claude for general coding; another kind when the user asks for it or a second-model opinion is valuable (e.g. a codex reviewer next to a claude implementer).
 - `-a`: extra arguments passed to the agent executable, e.g. `-a "--model claude-opus-5"` or `-k codex -a "-m gpt-5.6	"`. For claude the default is `--permission-mode acceptEdits`; passing `-a` replaces that default, so re-include a permission flag if you still want it.
 - `-m`: spawn mode, `pane` (default) or `tab`. Defaults to `$HERD_SPAWN_MODE` if that env var is set, else `pane`. Use `tab` when panes would get too cramped or the user wants workers kept visually separate.
-- `<name>`: short kebab-case, unique among live agents, matching `[a-z][a-z0-9_-]{0,31}` (e.g. `fix-auth`, `api-docs`)
+- `<name>`: short kebab-case, unique among live agents, matching `[a-z][a-z0-9_-]{0,31}` (e.g. `fix-auth`, `api-docs`). The pane name must start with a letter, never a digit (`build-7800`, not `7800-build`)
 - `<cwd>`: the repo/directory the worker should work in (defaults matter — workers only see this dir's context)
 - Pane mode (default): splits a pane beside the current one (same tab). Tab mode: opens a new tab. Either way, the script starts the worker, submits the task, and sets the report protocol: the worker writes its final report to `/tmp/herd/<name>.md`
 
