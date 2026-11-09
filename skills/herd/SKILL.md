@@ -7,14 +7,26 @@ description: Coordinate multi-agent work in herdr — spawn worker agents (claud
 
 You are the head agent of a Herdr multi-agent setup. You receive tasks from the user, delegate each one to a worker agent — by default in its own pane split beside yours (same tab), or in its own tab if `-m tab` is used — track progress, and report results. Do not do task work yourself — delegate anything non-trivial. Answer trivial questions directly.
 
+## When the herd mod is present
+
+If the `mcp__herd__*` tools exist (Claude Code with the herd plugin), they replace the herdr mechanics of this skill. Follow the mapping in the `mcp__herd__spawn` and `mcp__herd__status` tool descriptions, which wins over the sections below where they differ:
+
+- `herd-spawn`, background `herdr agent wait` watchers, `send-keys`, pane tiling and `herdr pane close` do not apply. The mod spawns headless workers and wakes you with a `[herd]` message when one finishes, needs input or stalls.
+- Reports live in `~/.herd/<name>.md`, not `/tmp/herd/`.
+- `mcp__herd__spawn` runs `choicemymodel` itself when `args` is omitted: do not run it by hand for a spawn.
+- Reviewers always run read-only (`readOnly: true`), codex included, overriding the `danger-full-access` rule below. Their final reply is saved as their report.
+- Claude workers can run as app sessions instead: see the `mcp__herd__status` description.
+
+Still apply from this skill: delegate any non-trivial work, write standalone task text, isolate a worker that needs its own branch in a worktree under `.claude/worktrees/<name>` and remove it once merged or abandoned, one task in flight per worker, and ask before stopping a worker.
+
 ### Picking the worker model
 
-Before every worker start (herd-spawn or a manual `herdr agent start`), run choicemymodel "<full task text>" once per worker and use the kind and args fields of its JSON output as -k and -a. Do not pick the model, the reasoning effort or the permission mode yourself — the routing table behind that command is pinned by evals per task class. If the command fails, fall back to the defaults below and say so in your report.
+Before every worker start (herd-spawn or a manual `herdr agent start`), run choicemymodel "<full task text>" once per worker and use the kind and args fields of its JSON output as -k and -a. Do not pick the model or reasoning effort yourself — the routing table behind that command is pinned by evals per task class. When the selected kind is Codex, normalize its sandbox mode to full access as described below. If the command fails, fall back to the defaults below and say so in your report.
 
 - **Kind imposed by the user or by the task** (e.g. "ask the other model", "use codex for the review"): still run `choicemymodel --kind <claude|codex> "<full task text>"`. It returns the model, the effort and the args for that kind. Never hand-pick a codex or claude model because the kind was imposed.
 - **Only skip choicemymodel** when the user names the exact model and effort in their own words, then use those verbatim.
 - **Run it once per worker.** A review worker needs its own call, with its own task text. Reusing the output of the first worker's call for a different task, or overriding any of its fields, is forbidden.
-- **Use `args` as returned.** If a returned field has to change (e.g. `--permission-mode plan` blocks the report file write), do not edit it silently: say so to the user and ask, or follow the plan-mode rule in "Track workers" (verdict in the chat reply, no report file).
+- **Use `args` as returned**, except for the Codex sandbox mode. For every Codex worker, replace any returned sandbox selection with `--sandbox danger-full-access`, or append it when absent. Preserve the returned model, reasoning effort, approval policy and all other fields. If another field has to change (e.g. `--permission-mode plan` blocks the report file write), do not edit it silently: say so to the user and ask, or follow the plan-mode rule in "Track workers" (verdict in the chat reply, no report file).
 ## Spawn a worker (one per task)
 
 ```
@@ -48,7 +60,7 @@ Only fall back to a version-pinned ID (cross-checked against this session's own 
 
 ### Codex workers: models and reasoning
 
-Codex (OpenAI) models — pass with `-a '-m <model_id> -c model_reasoning_effort=<level> --sandbox workspace-write'`. Unlike Claude, Codex has **no bare tier alias** that self-resolves to the latest version — verified: `codex exec -m sol ...` fails outright ("the 'sol' model is not supported"), so the full versioned ID (`gpt-<version>-sol`) is always required, and that version number goes stale exactly like a pinned Claude ID would.
+Codex (OpenAI) models — pass with `-a '-m <model_id> -c model_reasoning_effort=<level> --sandbox danger-full-access'`. Unlike Claude, Codex has **no bare tier alias** that self-resolves to the latest version — verified: `codex exec -m sol ...` fails outright ("the 'sol' model is not supported"), so the full versioned ID (`gpt-<version>-sol`) is always required, and that version number goes stale exactly like a pinned Claude ID would.
 
 Before every use, cross-check the version prefix against a live source, not just the table below: run `codex doctor | grep model` (or read the top-level `model = "..."` line in `~/.codex/config.toml`) to see the version prefix the local Codex install currently defaults to — that default is kept current by the user's own Codex CLI/account, unlike this skill's table. Take the prefix from whichever tier that default names (usually `sol`) and reuse it for the other two tiers (swap the `-sol`/`-terra`/`-luna` suffix, same prefix). If the prefix differs from the table below, or you're about to spawn a tier you haven't verified this session, do one cheap probe first — `codex exec -m <candidate> -c model_reasoning_effort=low --sandbox read-only --skip-git-repo-check "reply OK"` — and check for a `Model metadata for '<id>' not found` warning or a 400 error before trusting it for the real task.
 
@@ -60,9 +72,9 @@ Before every use, cross-check the version prefix against a live source, not just
 
 Reasoning levels (all three models): `none`, `low`, `medium`, `high`, `xhigh`, `max`. If the local codex config defaults to a high level, override downward for routine tasks: Terra at `medium`/`high` for ordinary coding, Sol at `xhigh`/`max` only for genuinely hard problems, Luna at `low`/`medium` for bulk mechanical work.
 
-Always include `--sandbox workspace-write` for codex workers: it lets them edit and run commands inside their cwd without approval prompts (fewer `blocked` states to shepherd) while the OS sandbox keeps everything outside the workspace read-only. Drop to `read-only` for pure review/analysis tasks.
+Always include `--sandbox danger-full-access` for Codex workers, including review and analysis workers. It gives their commands unrestricted filesystem and network access. Keep the approval policy returned by `choicemymodel` unchanged.
 
-Example: `herd-spawn -k codex -a '-m gpt-5.6-terra -c model_reasoning_effort=high --sandbox workspace-write' review-auth ~/proj "Review the auth diff"`
+Example: `herd-spawn -k codex -a '-m gpt-5.6-terra -c model_reasoning_effort=high --sandbox danger-full-access' review-auth ~/proj "Review the auth diff"`
 
 ## Track workers
 
