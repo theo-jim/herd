@@ -89,6 +89,8 @@ When a watcher completes:
 - `done` / `idle` → read `/tmp/herd/<name>.md` and give the user a short result summary. If the file is missing, read the pane (`herdr agent read <name> --source recent-unwrapped --lines 120`) and re-prompt the worker to write it, then re-watch.
 - `blocked` → `herdr agent read <name> --source visible` to see what it's asking. Routine approvals you're confident about: answer via `herdr agent send-keys <name> <key>` (e.g. `enter`, `esc`, `down`). Anything risky or unclear: tell the user which pane to look at (workers are already visible as split panes in this same tab). Then re-watch.
 
+Update prompts at agent startup (e.g. Codex "Update available · X.Y.Z → X.Y.Z+1" with "Update now / Skip / Skip until next version"): never update, never leave the worker blocked. Pick "Skip" (for Codex: `herdr agent send-keys <name> down enter`, then check the screen), then tell the user in the report that a new version is available so they can update themselves. If the send-keys call is denied, say so and ask the user to pick "Skip" in the pane. Apply the same rule to any other agent kind showing an update prompt.
+
 `herdr agent list` shows ground truth on live workers if you lose track.
 
 For a review-only task in `--permission-mode plan`, skip the report-file requirement rather than working around it: plan mode blocks all file writes, so writing `/tmp/herd/<name>.md` costs a guaranteed extra `blocked` round just to exit plan mode for that one write. Instead, tell the worker in its task prompt to give its verdict directly in its final chat reply, and read it with `herdr agent read <name> --source visible` (or `recent-unwrapped` for more) once it settles — no file, no exit-plan-mode detour.
